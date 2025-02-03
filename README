@@ -1,0 +1,12 @@
+patterns:
+
+    fullCollor
+    rainbow
+    chase
+    colorWipe
+    fadeToColor
+    runningLights
+    fadeToBlack
+
+brightness: 0-255
+color R/B/G: 0-255
