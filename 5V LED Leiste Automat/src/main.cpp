@@ -263,7 +263,7 @@ void chase()
   int lightSection = 3; // Number of pixels in each section of the chase pattern
 
   // run around the led strip with 3 leds on
-  // at the end the beginning have to light up again so no time less then 3 are light up
+  
   strip.setBrightness(stripState.brightness); // Set the brightness of the strip
   int i = 0;
 
@@ -274,7 +274,7 @@ void chase()
     if (i >= 0)
       strip.setPixelColor((i - lightSection) % LED_COUNT, strip.Color(0, 0, 0));
     strip.show();                    // Update the LED strip with the new colors
-    delay(stripState.pattern.speed); // Wait for 10 milliseconds before moving on to the next color
+    delay(stripState.pattern.speed); // Wait for x milliseconds before moving on to the next color
   }
 }
 
@@ -294,8 +294,8 @@ void colorWipe()
 ////////////////////////////////////////////////////FADE FUNCTION///////////////////////////////
 void fadeToColor()
 {
-  // Calculate the number of steps for each color component
   // first fades to startColor and then fades to endColor
+  // Calculate the number of steps for each color component
   int stepsR1 = abs(stripState.lastSetColor[0] - stripState.pattern.colorStart[0]);
   int stepsG1 = abs(stripState.lastSetColor[1] - stripState.pattern.colorStart[1]);
   int stepsB1 = abs(stripState.lastSetColor[2] - stripState.pattern.colorStart[2]);
@@ -388,7 +388,6 @@ void runningLights()
 void fadeToBlack()
 {
   // Calculate the number of steps for each color component
-  // first fades to startColor and then fades to endColor
   int stepsR1 = abs(stripState.lastSetColor[0] - 0);
   int stepsG1 = abs(stripState.lastSetColor[1] - 0);
   int stepsB1 = abs(stripState.lastSetColor[2] - 0);
