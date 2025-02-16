@@ -1,26 +1,4 @@
 
-"""
-start serial console to com3 at 115200 baud rate
-then test following json codes to send to the device
-
-  Serial.println("{\"stripOn\":true, \"color\":[155,0,0], \"brightness\":90, \"pattern\":{\"patternName\":\"fullColor\"}}");
-  Serial.println("{\"stripOn\":true, \"color\":[0,0,150], \"brightness\":150, \"pattern\":{\"patternName\":\"fullColor\"}}");
-  Serial.println("{\"stripOn\":true, \"brightness\":90, \"pattern\":{\"patternName\":\"rainbow\", \"speed\":200}}");
-  Serial.println("{\"stripOn\":true, \"brightness\":150, \"pattern\":{\"patternName\":\"rainbow\", \"speed\":1000}}");
-  Serial.println("{\"stripOn\":true, \"color\":[150,0,0], \"brightness\":150, \"pattern\":{\"patternName\":\"chase\", \"speed\":50}}");
-  Serial.println("{\"stripOn\":true, \"color\":[0,0,150], \"brightness\":150, \"pattern\":{\"patternName\":\"chase\", \"speed\":200}}");
-  Serial.println("{\"stripOn\":true, \"color\":[255,0,0], \"brightness\":100, \"pattern\":{\"patternName\":\"colorWipe\", \"speed\":210}}");
-  Serial.println("{\"stripOn\":false, \"color\":[255,255,0], \"brightness\":100, \"pattern\":{\"patternName\":\"colorWipe\", \"speed\":1000}}");
-  Serial.println("{\"stripOn\":true, \"pattern\":{\"patternName\":\"colorWipe\"}}");
-  Serial.println("{\"stripOn\":true, \"color\":[55,10,100], \"brightness\":40, \"pattern\":{\"patternName\":\"fadeToColor\", \"colorStart\":[100,10,0], \"colorEnd\":[0,10,100], \"speed\":1000}}");
-  Serial.println("{\"stripOn\":true, \"color\":[55,10,100], \"brightness\":80, \"pattern\":{\"patternName\":\"fadeToColor\", \"colorStart\":[50,50,0], \"colorEnd\":[0,100,150], \"speed\":100}}");
-  Serial.println("{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"runningLights\", \"speed\":500}}");
-  Serial.println("{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"runningLights\", \"speed\":200}}");
-  Serial.println("{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"fadeToBlack\", \"speed\":140}}");
-  Serial.println("{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"fadeToBlack\", \"speed\":20}}");
-  Serial.println("{\"stripOn\":false}");
-"""
-
 import serial
 import json
 import fastapi
@@ -32,9 +10,95 @@ app = fastapi.FastAPI()
 dictPattern = {"fullColor", "rainbow", "chase", "colorWipe", "fadeToColor", "runningLights", "fadeToBlack"}
 
 @app.post("/setLEDs")
-async def full_color(stripOn: bool = True, patternName: str = None, color_Red: int = 0, color_Green: int = 0, color_Blue: int = 0, brightness: int = 255, speed: int = 200, colorStartR: int = 0, colorStartG: int = 0, colorStartB: int = 0, colorEndR: int = 0, colorEndG: int = 0, colorEndB: int = 0):
+async def full_color(stripOn: bool = True, patternName: str = dictPattern, color_Red: int = 0, color_Green: int = 0, color_Blue: int = 0, brightness: int = 255, speed: int = 200, colorStartR: int = 0, colorStartG: int = 0, colorStartB: int = 0, colorEndR: int = 0, colorEndG: int = 0, colorEndB: int = 0):
     return send_command(stripOn= stripOn, pattern= patternName, colorR = color_Red, colorG = color_Green, colorB = color_Blue, brightness = brightness, speed= speed, colorStartR= colorStartR, colorStartG=colorStartG, colorStartB=colorStartB, colorEndR=colorEndR, colorEndG=colorEndG, colorEndB=colorEndB)
 
+@app.post("/help")
+async def help():
+    try:
+        print("connecting...")
+
+        ser = serial.Serial('COM3', 115200, timeout=5)
+
+        print("connected")
+        
+    except serial.SerialException as e:
+        return {"status": "error1", "message": str(e)}
+
+    try:
+        help_command = "help"
+        print("Sending help command...")
+    
+        ser.write(help_command.encode())
+        time.sleep(0.5)
+
+        response = ""
+        while True:
+            response += ser.readline().decode('utf-8').strip()
+            if not response.__contains__("~"):
+                continue
+            break
+
+        print("response: " + response)
+        print("Reading response...")
+        
+
+
+        #response = ser.readline().decode().strip()
+        
+        print("Response received:", response)
+        
+        return response
+    finally:
+        ser.close()    
+
+@app.post("/Status_barrier")
+async def getBerrierStatus():
+    try:
+        print("connecting...")
+        ser = serial.Serial('COM3', 115200, timeout=5)
+        print("connected")   
+    except serial.SerialException as e:
+        return {"status": "error1", "message": str(e)}
+    try:
+        command = "Status barrier"
+        print("Sending command...")
+        
+        ser.write(command.encode())
+        time.sleep(0.5)
+        
+        response = ser.readline().decode('utf-8').strip()
+        print("response: " + response)
+        print("Reading response...")
+        
+        return response
+    finally:
+        ser.close()    
+
+
+        
+@app.post("/Barrier_Threashold")
+async def getBerrierStatus(lightBarrierThreshold: int = 200):
+    try:
+        print("connecting...")
+        ser = serial.Serial('COM3', 115200, timeout=5)
+        print("connected")   
+    except serial.SerialException as e:
+        return {"status": "error1", "message": str(e)}
+    try:
+        command = "{\"lightBarrierThreshold\": " + lightBarrierThreshold + "}"
+        print("Sending command...")
+        
+        ser.write(command.encode())
+        time.sleep(0.5)
+        
+        response = ser.readline().decode('utf-8').strip()
+        print("response: " + response)
+        print("Reading response...")
+        
+        return response
+    finally:
+        ser.close()    
 
 def send_command(stripOn: bool = None, pattern: str = None, colorR: int = None, colorG: int = None, colorB: int= None, brightness: int = None, speed: int = None, colorStartR: int = None, colorStartG: int = None, colorStartB: int = None, colorEndR: int = None, colorEndG: int = None, colorEndB: int = None):
     global ser
@@ -71,9 +135,9 @@ def send_command(stripOn: bool = None, pattern: str = None, colorR: int = None, 
 
         ser.write(command.encode('utf-8'))
         print(command)
-        time.sleep(0.5) # Adjust as needed
         
-        response = ser.readline().decode('utf-8').strip()
+        time.sleep(1) # Adjust as needed
+        response =  ser.readline().decode('utf-8').strip()
         
         ser.close()
         return {"status": "success", "response": response}

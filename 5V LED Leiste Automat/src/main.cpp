@@ -9,10 +9,48 @@ const int LED_PIN = D1;
 const int LED_COUNT = 25;
 bool allSet = false;
 
+const int LIGHT_BARRIER_PIN = A0;
+
 void fadeToColor();
 void fadeToBlack();
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+struct barrierState
+{
+  int lightBarrierAnalog = 0;
+  bool lightBarrier = false;
+  int lightBarrierThreshold = 100; 
+  unsigned long lastTimeTriggert = 0;
+
+  void triggert()
+  {
+    lightBarrierAnalog = analogRead(LIGHT_BARRIER_PIN);
+    
+    
+    if (lightBarrierAnalog > lightBarrierThreshold)
+    { 
+      
+      if(!lightBarrier) lastTimeTriggert = millis();
+      
+      lightBarrier = true;
+    }
+    else
+    {
+      if(lightBarrier) lastTimeTriggert = millis();
+      lightBarrier = false;
+    }
+  }
+
+  String printJson()
+  {
+    triggert();
+
+    String json = "{\"Analog\": " + String(lightBarrierAnalog) + ", \"Tiggert\": " + (lightBarrier ? "true" : "false") + ",  \"Last Triggert\": " + String(millis() - lastTimeTriggert) + ", \"Threshold\" :" + String(lightBarrierThreshold) + "}";
+
+    return json;
+  }
+};
 
 struct Pattern
 {
@@ -36,10 +74,11 @@ struct mainStrip
   int brightness = 255;
   Pattern pattern = Pattern("fullColor");
   bool stripOn = false;
+  barrierState barrier;
 
   String printJson()
   {
-    String json = "{\"color\":[ " + String(color[0]) + ", " + String(color[1]) + ", " + String(color[2]) + " ],\"brightness\": " + String(brightness) + ", \"pattern\":" + pattern.printJson() + ",\"stripOn\": " + (stripOn ? "true" : "false") + "}";
+    String json = "{\"color\":[ " + String(color[0]) + ", " + String(color[1]) + ", " + String(color[2]) + " ],\"brightness\": " + String(brightness) + ", \"pattern\":" + pattern.printJson() + ",\"stripOn\": " + (stripOn ? "true" : "false") + ", \"Barrier State\" :" + barrier.printJson() + "}";
     return json;
   }
   void setLastColor(int color[3])
@@ -58,9 +97,13 @@ struct mainStrip
 
 mainStrip stripState; // Create an instance of the struct to hold the current state of the strip
 
+
 void setup()
 {
   Serial.begin(115200);
+
+  pinMode(LIGHT_BARRIER_PIN, INPUT);
+
   strip.begin();
   strip.clear();
   strip.show();
@@ -74,6 +117,11 @@ void setup()
   stripState.pattern.colorEnd[2] = 0;
   fadeToColor();
   fadeToBlack();
+
+  //attachInterrupt(digitalPinToInterrupt(LIGHT_BARRIER_PIN), triggerBridge, CHANGE);
+
+
+
 }
 
 void printHelp()
@@ -82,8 +130,9 @@ void printHelp()
   Serial.println("\tstripOn: true/false");
   Serial.println("\tcolor: <Red> <Green> <Blue>");
   Serial.println("\tbrightness: <0-100>");
-  Serial.println("\tcurrentPattern || return current Settings\n");
+  Serial.println("\tStatus: return current Settings\n");
   Serial.println("\thelp: prints this message\n");
+  Serial.println("\tStatus barrier: returns the state of the light barrier\n");
 
   Serial.println("Patterns:");
 
@@ -113,9 +162,18 @@ void printHelp()
   Serial.println("\t\t{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"fadeToBlack\", \"speed\":140}}");
   Serial.println("\t\t{\"stripOn\":true, \"color\":[100,50,0], \"brightness\":40, \"pattern\":{\"patternName\":\"fadeToBlack\", \"speed\":20}}");
   Serial.println("\t\t{\"stripOn\":false}");
+  
+  Serial.println();
+  Serial.println("\t\tStatus");
+  Serial.println("\t\tStatus barrier");
+  Serial.println("\t\t{\"lightBarrierThreshold\": 200}");
+
+
 
   Serial.println("If some settings are left out the last settings will be used");
   Serial.println("If stripOn is false, the strip will turn off. You can still change the color, pattern and brightness for the next time it is turned on");
+  Serial.println("~");
+
 }
 
 void serialEvent()
@@ -138,11 +196,18 @@ void serialEvent()
     return;
   }
 
-  if (String(incomingData).equals("currentPattern"))
+  if (String(incomingData).equals("Status"))
   {
     Serial.println(stripState.printJson());
     return;
   }
+
+  if(String(incomingData).equals("Status barrier")){
+    Serial.println(stripState.barrier.printJson());
+    return;
+  }
+
+
 
   allSet = false;
 
@@ -151,8 +216,8 @@ void serialEvent()
   deserializeJson(doc, incomingData);
 
   // print json
-  //serializeJsonPretty(doc, Serial);
-  //Serial.println();
+  // serializeJsonPretty(doc, Serial);
+  // Serial.println();
   if (doc == NULL)
   {
     Serial.println("Error");
@@ -160,26 +225,27 @@ void serialEvent()
   }
 
   // check if "stripOn" is false and turn off the strip
-  if (doc.containsKey("stripOn"))
+  if (doc["stripOn"])
   {
     stripState.stripOn = doc["stripOn"].as<bool>();
   }
 
   // update strip state based on incoming JSON
-  if (doc.containsKey("color"))
+  if (doc["color"])
   {
     String color = doc["color"].as<String>();
     stripState.color[0] = doc["color"][0].as<int>();
     stripState.color[1] = doc["color"][1].as<int>();
     stripState.color[2] = doc["color"][2].as<int>();
   }
-  if (doc.containsKey("brightness"))
+  if (doc["brightness"])
   {
     stripState.brightness = doc["brightness"].as<int>();
   }
-  if (doc.containsKey("pattern"))
+  if (doc["pattern"])
+
   {
-    if (doc["pattern"].containsKey("patternName"))
+    if (doc["pattern"]["patternName"])
     {
       stripState.pattern.patternName = doc["pattern"]["patternName"].as<String>();
     }
@@ -201,6 +267,12 @@ void serialEvent()
       stripState.pattern.colorEnd[2] = doc["pattern"]["colorEnd"][2].as<int>();
   }
 
+  if(doc["lightBarrierThreshold"]){
+    if (stripState.barrier.lightBarrierThreshold != doc["lightBarrierThreshold"].as<int>())
+      stripState.barrier.lightBarrierThreshold = doc["lightBarrierThreshold"].as<int>();
+
+  }
+
   Serial.println(stripState.printJson());
 }
 
@@ -212,7 +284,7 @@ int Wheel(byte WheelPos)
   // scale WheelPos from 0 to 255 with LED_COUNT
   WheelPos = map(WheelPos, 0, LED_COUNT, 0, 255);
 
-  byte r, g, b;
+  byte r, g, b = 0;
   switch (WheelPos / 85)
   {
   case 0:
@@ -263,7 +335,7 @@ void chase()
   int lightSection = 3; // Number of pixels in each section of the chase pattern
 
   // run around the led strip with 3 leds on
-  
+  // at the end the beginning have to light up again so no time less then 3 are light up
   strip.setBrightness(stripState.brightness); // Set the brightness of the strip
   int i = 0;
 
@@ -274,7 +346,7 @@ void chase()
     if (i >= 0)
       strip.setPixelColor((i - lightSection) % LED_COUNT, strip.Color(0, 0, 0));
     strip.show();                    // Update the LED strip with the new colors
-    delay(stripState.pattern.speed); // Wait for x milliseconds before moving on to the next color
+    delay(stripState.pattern.speed); // Wait for 10 milliseconds before moving on to the next color
   }
 }
 
@@ -294,8 +366,8 @@ void colorWipe()
 ////////////////////////////////////////////////////FADE FUNCTION///////////////////////////////
 void fadeToColor()
 {
-  // first fades to startColor and then fades to endColor
   // Calculate the number of steps for each color component
+  // first fades to startColor and then fades to endColor
   int stepsR1 = abs(stripState.lastSetColor[0] - stripState.pattern.colorStart[0]);
   int stepsG1 = abs(stripState.lastSetColor[1] - stripState.pattern.colorStart[1]);
   int stepsB1 = abs(stripState.lastSetColor[2] - stripState.pattern.colorStart[2]);
@@ -313,8 +385,7 @@ void fadeToColor()
     {
       int r = (stripState.lastSetColor[0] != stripState.pattern.colorStart[0]) ? (stripState.lastSetColor[0] > stripState.pattern.colorStart[0]) ? stripState.lastSetColor[0] - 1 : stripState.lastSetColor[0] + 1 : stripState.pattern.colorStart[0];
       int g = (stripState.lastSetColor[1] != stripState.pattern.colorStart[1]) ? (stripState.lastSetColor[1] > stripState.pattern.colorStart[1]) ? stripState.lastSetColor[1] - 1 : stripState.lastSetColor[1] + 1 : stripState.pattern.colorStart[1];
-      int b = (stripState.lastSetColor[2] != stripState.pattern.colorStart[2]) ? (stripState.lastSetColor[2] > stripState.pattern.colorStart[2]) ? stripState.lastSetColor[2] - 1 : stripState.lastSetColor[2] + 1 : stripState.pattern.colorStart[2]; 
-
+      int b = (stripState.lastSetColor[2] != stripState.pattern.colorStart[2]) ? (stripState.lastSetColor[2] > stripState.pattern.colorStart[2]) ? stripState.lastSetColor[2] - 1 : stripState.lastSetColor[2] + 1 : stripState.pattern.colorStart[2];
 
       stripState.lastSetColor[0] = r;
       stripState.lastSetColor[1] = g;
@@ -331,15 +402,13 @@ void fadeToColor()
 
   for (int i = 0; i < maxcount2; i++)
   {
-      int r = (stripState.lastSetColor[0] != stripState.pattern.colorEnd[0]) ? (stripState.lastSetColor[0] > stripState.pattern.colorEnd[0]) ? stripState.lastSetColor[0] - 1 : stripState.lastSetColor[0] + 1 : stripState.pattern.colorEnd[0];
-      int g = (stripState.lastSetColor[1] != stripState.pattern.colorEnd[1]) ? (stripState.lastSetColor[1] > stripState.pattern.colorEnd[1]) ? stripState.lastSetColor[1] - 1 : stripState.lastSetColor[1] + 1 : stripState.pattern.colorEnd[1];
-      int b = (stripState.lastSetColor[2] != stripState.pattern.colorEnd[2]) ? (stripState.lastSetColor[2] > stripState.pattern.colorEnd[2]) ? stripState.lastSetColor[2] - 1 : stripState.lastSetColor[2] + 1 : stripState.pattern.colorEnd[2]; 
-
+    int r = (stripState.lastSetColor[0] != stripState.pattern.colorEnd[0]) ? (stripState.lastSetColor[0] > stripState.pattern.colorEnd[0]) ? stripState.lastSetColor[0] - 1 : stripState.lastSetColor[0] + 1 : stripState.pattern.colorEnd[0];
+    int g = (stripState.lastSetColor[1] != stripState.pattern.colorEnd[1]) ? (stripState.lastSetColor[1] > stripState.pattern.colorEnd[1]) ? stripState.lastSetColor[1] - 1 : stripState.lastSetColor[1] + 1 : stripState.pattern.colorEnd[1];
+    int b = (stripState.lastSetColor[2] != stripState.pattern.colorEnd[2]) ? (stripState.lastSetColor[2] > stripState.pattern.colorEnd[2]) ? stripState.lastSetColor[2] - 1 : stripState.lastSetColor[2] + 1 : stripState.pattern.colorEnd[2];
 
     stripState.lastSetColor[0] = r;
     stripState.lastSetColor[1] = g;
     stripState.lastSetColor[2] = b;
-
 
     for (int j = 0; j < LED_COUNT; j++)
     {
@@ -388,6 +457,7 @@ void runningLights()
 void fadeToBlack()
 {
   // Calculate the number of steps for each color component
+  // first fades to startColor and then fades to endColor
   int stepsR1 = abs(stripState.lastSetColor[0] - 0);
   int stepsG1 = abs(stripState.lastSetColor[1] - 0);
   int stepsB1 = abs(stripState.lastSetColor[2] - 0);
@@ -400,8 +470,7 @@ void fadeToBlack()
     {
       int r = (stripState.lastSetColor[0] > 0) ? stripState.lastSetColor[0] - 1 : 0;
       int g = (stripState.lastSetColor[1] > 0) ? stripState.lastSetColor[1] - 1 : 0;
-      int b = (stripState.lastSetColor[2] > 0) ? stripState.lastSetColor[2] - 1 : 0; 
-
+      int b = (stripState.lastSetColor[2] > 0) ? stripState.lastSetColor[2] - 1 : 0;
 
       stripState.lastSetColor[0] = r;
       stripState.lastSetColor[1] = g;
@@ -473,6 +542,8 @@ void loop()
       allSet = true;                    // set allSet to true to indicate that the strip is not on
     }
   }
+  stripState.barrier.triggert();
+
 }
 
 /*
