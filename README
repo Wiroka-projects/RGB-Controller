@@ -10,3 +10,21 @@ patterns:
 
 brightness: 0-255
 color R/B/G: 0-255
+
+
+
+***************
+curl https://bootstrap.pypa.io/get-pip.py > get-pip.py
+py get-pip.py
+py -m pip --version
+py -m pip install "fastapi[standard]"
+
+py -m pip install pyserial
+
+
+*******************
+ausführen 
+
+py -m fastapi dev test_led.py
+
+-> 127.0.0.1:8000/docs 
